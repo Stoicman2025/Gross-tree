@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Семейное дерево</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Nunito+Sans:wght@400;600;700&family=Caveat:wght@500;600&display=swap');
+
+:root{
+  --bg: #FBF6EF;
+  --card: #F4ECE0;
+  --ink: #3D3530;
+  --ink-soft: #8A7E72;
+  --sage: #9FAE8F;
+  --sage-dark: #7E9270;
+  --terracotta: #C97B5C;
+  --rose: #CBA0A6;
+  --blue: #9DB4C9;
+  --gold: #D9B36A;
+  --line: #E6DACB;
+}
+
+*{ box-sizing: border-box; }
+html,body{ margin:0; padding:0; }
+
+body{
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 10% 0%, rgba(159,174,143,0.10), transparent 50%),
+    radial-gradient(ellipse at 90% 10%, rgba(201,123,92,0.08), transparent 45%);
+  color: var(--ink);
+  font-family: 'Nunito Sans', sans-serif;
+  min-height: 100vh;
+}
+
+.wrap{ max-width: 900px; margin: 0 auto; padding: 28px 20px 60px; }
+
+header{ text-align: center; margin-bottom: 28px; }
+
+.title-input{
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: clamp(28px, 6vw, 44px);
+  text-align: center;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  width: 100%;
+  outline: none;
+  border-bottom: 1px dashed transparent;
+  transition: border-color .2s;
+}
+.title-input:hover, .title-input:focus{ border-bottom-color: var(--gold); }
+
+.subtitle{ font-size: 14px; color: var(--ink-soft); margin-top: 6px; letter-spacing: .03em; }
+
+nav.tabs{ display:flex; justify-content: center; gap: 10px; margin: 22px 0 26px; flex-wrap: wrap; }
+
+.tab-btn{
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 700; font-size: 14px; letter-spacing: .02em;
+  padding: 12px 22px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  cursor: pointer; transition: all .2s ease;
+}
+.tab-btn:hover{ border-color: var(--terracotta); color: var(--terracotta); }
+.tab-btn.active{ background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+
+section{ display: none; }
+section.active{ display: block; animation: fade .35s ease; }
+@keyframes fade{ from{ opacity:0; transform: translateY(6px);} to{ opacity:1; transform: translateY(0);} }
+
+.card{
+  background: var(--card); border-radius: 22px;
+  padding: 32px clamp(20px,5vw,44px);
+  box-shadow: 0 12px 40px -16px rgba(61,53,48,0.25);
+  border: 1px solid var(--line);
+}
+.card h2{ font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 28px; margin: 0 0 4px; }
+.card p.intro{ color: var(--ink-soft); font-size: 14px; margin: 0 0 26px; line-height: 1.6; }
+
+.field{ margin-bottom: 18px; }
+.field label{ display:block; font-size: 13px; font-weight: 700; letter-spacing: .03em; margin-bottom: 6px; color: var(--ink); }
+.field .hint{ font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+
+.row2{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 540px){ .row2{ grid-template-columns: 1fr; } }
+
+input[type=text], input[type=number], select, textarea{
+  width: 100%; font-family: 'Nunito Sans', sans-serif; font-size: 15px;
+  padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+input:focus, select:focus, textarea:focus{
+  border-color: var(--terracotta); box-shadow: 0 0 0 3px rgba(201,123,92,0.12);
+}
+textarea{ resize: vertical; min-height: 70px; font-family: 'Nunito Sans', sans-serif; }
+
+.submit-btn{
+  margin-top: 8px; width: 100%; background: var(--sage-dark); color: #fff;
+  border: none; font-family: 'Cormorant Garamond', serif; font-weight: 600;
+  font-size: 19px; letter-spacing: .03em; padding: 14px; border-radius: 12px;
+  cursor: pointer; transition: background .2s, transform .1s;
+}
+.submit-btn:hover{ background: #708064; }
+.submit-btn:active{ transform: scale(0.99); }
+
+.toast{
+  margin-top: 14px; padding: 12px 16px; border-radius: 12px;
+  background: rgba(159,174,143,0.18); border: 1px solid var(--sage);
+  color: var(--sage-dark); font-size: 14px; font-weight: 600; display:none;
+}
+.toast.show{ display:block; animation: fade .3s ease; }
+
+.divider{ border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+
+.people-list{ font-size: 13px; color: var(--ink-soft); line-height: 1.8; }
+.people-list strong{ color: var(--ink); }
+
+.tree-card{
+  background: var(--card); border-radius: 22px;
+  padding: 18px clamp(8px,3vw,28px) 28px; border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.tree-empty{ text-align: center; padding: 60px 20px; }
+.tree-empty .seed{ font-size: 44px; margin-bottom: 12px; }
+.tree-empty h3{ font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 24px; margin: 0 0 8px; }
+.tree-empty p{ color: var(--ink-soft); font-size: 14px; max-width: 360px; margin: 0 auto; }
+
+.legend{ display:flex; justify-content:center; gap: 22px; margin-top: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
+.legend span{ display:flex; align-items:center; gap:6px; }
+.dot{ width:14px; height:14px; border-radius:50%; display:inline-block; border: 1.5px solid rgba(61,53,48,0.25); }
+
+footer{ text-align:center; margin-top: 36px; font-size: 12px; color: var(--ink-soft); letter-spacing: .03em; }
+
+/* ---------- lock screen ---------- */
+.lock-screen{
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.lock-card{
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 40px clamp(24px,6vw,48px);
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 12px 40px -16px rgba(61,53,48,0.25);
+}
+.lock-seed{ font-size: 40px; margin-bottom: 6px; }
+.lock-card h2{
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 26px;
+  margin: 0 0 6px;
+}
+.lock-card p{
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 0 0 20px;
+}
+.lock-card input{
+  margin-bottom: 14px;
+  text-align: center;
+  letter-spacing: .1em;
+}
+.lock-error{
+  display: none;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--terracotta);
+  font-weight: 700;
+}
+.lock-error.show{ display: block; }
+
+/* ---------- suggestion cards ---------- */
+.suggestion{
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.suggestion h4{
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: 19px;
+  margin: 0 0 6px;
+}
+.suggestion .meta{
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-bottom: 10px;
+}
+.suggestion .changes{
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.suggestion .changes .field-name{ font-weight: 700; }
+.suggestion .comment{
+  font-family: 'Caveat', cursive;
+  font-size: 17px;
+  color: var(--ink);
+  background: rgba(217,179,106,0.15);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.suggestion .actions{ display:flex; gap:10px; }
+.suggestion .actions button{
+  flex: 1;
+  font-family: 'Nunito Sans', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-approve{ background: var(--sage-dark); color: #fff; border-color: var(--sage-dark); }
+.btn-approve:hover{ background: #708064; }
+.btn-reject{ background: #fff; color: var(--terracotta); border-color: var(--terracotta); }
+.btn-reject:hover{ background: rgba(201,123,92,0.08); }
+.empty-note{ color: var(--ink-soft); font-size: 14px; text-align: center; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div id="lockScreen" class="lock-screen">
+  <div class="lock-card">
+    <div class="lock-seed">🔒</div>
+    <h2>Семейное дерево</h2>
+    <p>Введите семейный код, чтобы открыть дерево</p>
+    <input type="password" id="lockInput" placeholder="Код доступа" autocomplete="off" />
+    <button id="lockBtn" class="submit-btn">Войти</button>
+    <div class="lock-error" id="lockError">Неверный код. Попробуйте ещё раз.</div>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none;">
+
+  <header>
+    <input id="treeTitle" class="title-input" value="Семейное дерево" maxlength="60" />
+    <div class="subtitle">Заполните форму о себе — дерево соберётся само</div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="form">✍️ Заполнить анкету</button>
+    <button class="tab-btn" data-tab="suggest">💡 Предложить изменение</button>
+    <button class="tab-btn" data-tab="tree">🌳 Посмотреть семейное дерево</button>
+    <button class="tab-btn" data-tab="admin">🛡️ Модерация</button>
+  </nav>
+
+  <!-- FORM -->
+  <section id="view-form" class="active">
+    <div class="card">
+      <h2>Расскажите о себе</h2>
+      <p class="intro">Заполните, что знаете — остальное можно оставить пустым. Если кого-то (родителя, супруга, ребёнка) ещё нет в дереве, просто впишите имя — для него автоматически появится место, и он сможет дополнить свои данные позже.</p>
+
+      <div class="field">
+        <label for="f-name">Имя и фамилия *</label>
+        <input type="text" id="f-name" list="namesList" placeholder="Например, Анна Иванова" />
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="f-byear">Год рождения</label>
+          <input type="number" id="f-byear" placeholder="1990" min="1800" max="2100" />
+        </div>
+        <div class="field">
+          <label for="f-dyear">Год смерти (если применимо)</label>
+          <input type="number" id="f-dyear" placeholder="—" min="1800" max="2100" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="f-gender">Пол</label>
+        <select id="f-gender">
+          <option value="">Не указывать</option>
+          <option value="ж">Женский</option>
+          <option value="м">Мужской</option>
+        </select>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="f-parent1">Родитель 1</label>
+          <input type="text" id="f-parent1" list="namesList" placeholder="Имя мамы или папы" />
+        </div>
+        <div class="field">
+          <label for="f-parent2">Родитель 2</label>
+          <input type="text" id="f-parent2" list="namesList" placeholder="Имя мамы или папы" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="f-spouse">Супруг(а) / партнёр</label>
+        <input type="text" id="f-spouse" list="namesList" placeholder="Имя супруга или партнёра" />
+      </div>
+
+      <div class="field">
+        <label for="f-children">Дети</label>
+        <input type="text" id="f-children" placeholder="Имена через запятую: Олег Иванов, Мария Иванова" />
+        <div class="hint">Если ребёнок ещё не заполнял анкету сам — впишите его имя здесь, он появится на дереве.</div>
+      </div>
+
+      <datalist id="namesList"></datalist>
+
+      <div class="field">
+        <label for="f-note">Короткая заметка о себе</label>
+        <textarea id="f-note" placeholder="Город, профессия, любимое занятие, забавный факт..."></textarea>
+        <div class="hint">Эта заметка появится рядом с именем на дереве.</div>
+      </div>
+
+      <button class="submit-btn" id="submitBtn">Добавить себя в дерево</button>
+      <div class="toast" id="toast">Готово! Откройте «Посмотреть семейное дерево», чтобы увидеть результат 🌿</div>
+
+      <hr class="divider" />
+      <div class="people-list" id="peopleList">Загрузка списка…</div>
+    </div>
+  </section>
+
+  <!-- SUGGEST EDIT -->
+  <section id="view-suggest">
+    <div class="card">
+      <h2>Предложить исправление или дополнение</h2>
+      <p class="intro">Заметили ошибку в чужих данных или хотите добавить кого-то, кого упустили? Опишите, что нужно изменить — предложение увидит администратор дерева и либо примет его, либо отклонит. Само дерево не изменится, пока предложение не подтвердят.</p>
+
+      <div class="field">
+        <label for="s-target">О ком предложение?</label>
+        <select id="s-target">
+          <option value="">— Новый человек (которого ещё нет в дереве) —</option>
+        </select>
+      </div>
+
+      <div class="field" id="s-newname-field" style="display:none;">
+        <label for="s-newname">Имя нового человека *</label>
+        <input type="text" id="s-newname" placeholder="Например, Сергей Иванов" />
+      </div>
+
+      <p class="intro" style="margin-bottom:14px;">Заполните только то, что хотите изменить или добавить — остальные поля можно оставить пустыми.</p>
+
+      <div class="row2">
+        <div class="field">
+          <label for="s-byear">Год рождения</label>
+          <input type="number" id="s-byear" placeholder="1990" min="1800" max="2100" />
+        </div>
+        <div class="field">
+          <label for="s-dyear">Год смерти</label>
+          <input type="number" id="s-dyear" placeholder="—" min="1800" max="2100" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="s-gender">Пол</label>
+        <select id="s-gender">
+          <option value="">Не менять / не указывать</option>
+          <option value="ж">Женский</option>
+          <option value="м">Мужской</option>
+        </select>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="s-parent1">Родитель 1</label>
+          <input type="text" id="s-parent1" list="namesList" placeholder="Имя мамы или папы" />
+        </div>
+        <div class="field">
+          <label for="s-parent2">Родитель 2</label>
+          <input type="text" id="s-parent2" list="namesList" placeholder="Имя мамы или папы" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="s-spouse">Супруг(а) / партнёр</label>
+        <input type="text" id="s-spouse" list="namesList" placeholder="Имя супруга или партнёра" />
+      </div>
+
+      <div class="field">
+        <label for="s-children">Дети</label>
+        <input type="text" id="s-children" placeholder="Имена через запятую" />
+      </div>
+
+      <div class="field">
+        <label for="s-note">Заметка</label>
+        <textarea id="s-note" placeholder="Новый текст заметки (если хотите изменить)"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="s-comment">Комментарий для администратора</label>
+        <textarea id="s-comment" placeholder="Например: «Дата рождения указана неверно, правильный год — 1985» или «Это сестра папы, забыли добавить»"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="s-author">Ваше имя (чтобы администратор знал, от кого предложение)</label>
+        <input type="text" id="s-author" placeholder="Например, Анна Иванова" />
+      </div>
+
+      <button class="submit-btn" id="suggestBtn">Отправить предложение</button>
+      <div class="toast" id="suggestToast">Спасибо! Предложение отправлено на проверку администратору.</div>
+    </div>
+  </section>
+
+  <!-- TREE -->
+  <section id="view-tree">
+    <div class="tree-card" id="treeCard">
+      <div class="tree-empty">
+        <div class="seed">🌱</div>
+        <h3>Дерево пока пустое</h3>
+        <p>Как только кто-то заполнит анкету, здесь появится первая ветка.</p>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:#CBA0A6"></i>женщина</span>
+      <span><i class="dot" style="background:#9DB4C9"></i>мужчина</span>
+      <span><i class="dot" style="background:#9FAE8F"></i>не указано</span>
+    </div>
+  </section>
+
+  <!-- ADMIN / MODERATION -->
+  <section id="view-admin">
+    <div class="card">
+      <h2>Модерация предложений</h2>
+      <p class="intro">Здесь администратор дерева принимает или отклоняет предложения родственников.</p>
+
+      <div id="adminLock">
+        <div class="field">
+          <label for="admin-code">Код администратора</label>
+          <input type="password" id="admin-code" placeholder="Код администратора" autocomplete="off" />
+        </div>
+        <button class="submit-btn" id="adminBtn">Войти как администратор</button>
+        <div class="lock-error" id="adminError">Неверный код администратора.</div>
+      </div>
+
+      <div id="adminPanel" style="display:none;">
+        <hr class="divider" />
+        <div id="suggestionsList"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Данные сохраняются автоматически и видны всем, кто открыл эту страницу.</footer>
+</div>
+
+<script>
+// ---------- family password ----------
+// Поменяйте код ниже на ваш собственный — он сравнивается без учёта
+// заглавных/маленьких букв и пробелов по краям.
+const FAMILY_CODE = 'Наша семья';
+
+(function initLock(){
+  const lockScreen = document.getElementById('lockScreen');
+  const appWrap = document.getElementById('appWrap');
+  const input = document.getElementById('lockInput');
+  const btn = document.getElementById('lockBtn');
+  const error = document.getElementById('lockError');
+
+  function tryUnlock(){
+    const val = input.value.trim().toLowerCase();
+    if(val === FAMILY_CODE.trim().toLowerCase()){
+      lockScreen.style.display = 'none';
+      appWrap.style.display = 'block';
+    }else{
+      error.classList.add('show');
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  btn.addEventListener('click', tryUnlock);
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Enter') tryUnlock();
+    error.classList.remove('show');
+  });
+  input.focus();
+})();
+
+const STORE_KEY = 'family-tree-members';
+const TITLE_KEY = 'family-tree-title';
+const SUGGESTIONS_KEY = 'family-tree-suggestions';
+
+// Поменяйте на свой код администратора — он отдельный от семейного кода
+// и нужен только тому, кто принимает/отклоняет предложения.
+const ADMIN_CODE = 'admin2024';
+
+const GENDER_COLOR = { 'ж': '#CBA0A6', 'м': '#9DB4C9', '': '#9FAE8F' };
+const GENDER_LABEL = { 'ж': 'ж', 'м': 'м', '': '' };
+
+function normalize(name){ return name.trim().toLowerCase().replace(/\s+/g,' '); }
+function uid(){ return 'p_' + Math.random().toString(36).slice(2,10); }
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function truncate(s, n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+
+async function loadMembers(){
+  try{
+    const res = await window.storage.get(STORE_KEY, true);
+    return res ? JSON.parse(res.value) : [];
+  }catch(e){ return []; }
+}
+async function saveMembers(members){
+  try{ await window.storage.set(STORE_KEY, JSON.stringify(members), true); }
+  catch(e){ console.error('Storage error', e); }
+}
+async function loadTitle(){
+  try{ const res = await window.storage.get(TITLE_KEY, true); return res ? res.value : null; }
+  catch(e){ return null; }
+}
+async function saveTitle(title){
+  try{ await window.storage.set(TITLE_KEY, title, true); }catch(e){}
+}
+
+async function loadSuggestions(){
+  try{
+    const res = await window.storage.get(SUGGESTIONS_KEY, true);
+    return res ? JSON.parse(res.value) : [];
+  }catch(e){ return []; }
+}
+async function saveSuggestions(list){
+  try{ await window.storage.set(SUGGESTIONS_KEY, JSON.stringify(list), true); }
+  catch(e){ console.error('Storage error', e); }
+}
+
+// ---------- tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.getElementById('view-'+tab).classList.add('active');
+    if(tab === 'tree'){ await renderTree(); }
+    if(tab === 'form'){ await refreshNamesList(); }
+    if(tab === 'suggest'){ await refreshNamesList(); await refreshTargetSelect(); }
+    if(tab === 'admin'){ await refreshAdminPanel(); }
+  });
+});
+
+// ---------- title ----------
+const titleInput = document.getElementById('treeTitle');
+loadTitle().then(t=>{ if(t) titleInput.value = t; });
+let titleTimer;
+titleInput.addEventListener('input', ()=>{
+  clearTimeout(titleTimer);
+  titleTimer = setTimeout(()=>saveTitle(titleInput.value.trim() || 'Семейное дерево'), 500);
+});
+
+// ---------- helpers for members ----------
+async function refreshNamesList(){
+  const members = await loadMembers();
+  const dl = document.getElementById('namesList');
+  dl.innerHTML = members.map(m=>`<option value="${escapeHtml(m.name)}"></option>`).join('');
+
+  const list = document.getElementById('peopleList');
+  if(members.length === 0){
+    list.innerHTML = 'Пока никто не заполнил анкету.';
+  }else{
+    const names = members.map(m=>{
+      const g = GENDER_LABEL[m.gender || ''] || '';
+      return `<strong>${escapeHtml(m.name)}</strong>${g ? ' ('+g+')' : ''}`;
+    }).join(', ');
+    list.innerHTML = `Уже в дереве (${members.length}): ${names}`;
+  }
+}
+
+function findOrCreate(members, name){
+  const norm = normalize(name);
+  let m = members.find(x=>normalize(x.name) === norm);
+  if(!m){
+    m = { id: uid(), name: name.trim(), gender:'', birthYear:null, deathYear:null, parents:[], spouse:null, note:'' };
+    members.push(m);
+  }
+  return m;
+}
+
+// ---------- submit ----------
+document.getElementById('submitBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('f-name').value.trim();
+  if(!name){ alert('Пожалуйста, укажите имя.'); return; }
+
+  const byear = document.getElementById('f-byear').value;
+  const dyear = document.getElementById('f-dyear').value;
+  const gender = document.getElementById('f-gender').value;
+  const p1 = document.getElementById('f-parent1').value.trim();
+  const p2 = document.getElementById('f-parent2').value.trim();
+  const spouse = document.getElementById('f-spouse').value.trim();
+  const childrenRaw = document.getElementById('f-children').value.trim();
+  const note = document.getElementById('f-note').value.trim();
+
+  const members = await loadMembers();
+  const me = findOrCreate(members, name);
+
+  me.gender = gender || me.gender || '';
+  me.birthYear = byear ? parseInt(byear,10) : (me.birthYear ?? null);
+  me.deathYear = dyear ? parseInt(dyear,10) : (me.deathYear ?? null);
+  me.note = note || me.note || '';
+
+  const parentIds = [];
+  if(p1){ parentIds.push(findOrCreate(members, p1).id); }
+  if(p2){ parentIds.push(findOrCreate(members, p2).id); }
+  if(parentIds.length){
+    const merged = new Set([...(me.parents||[]), ...parentIds]);
+    me.parents = Array.from(merged).slice(0,2);
+  }
+
+  if(spouse){
+    const sp = findOrCreate(members, spouse);
+    me.spouse = sp.id;
+    sp.spouse = me.id;
+  }
+
+  if(childrenRaw){
+    childrenRaw.split(',').map(s=>s.trim()).filter(Boolean).forEach(childName=>{
+      const child = findOrCreate(members, childName);
+      const parentSet = new Set([...(child.parents||[]), me.id]);
+      if(me.spouse) parentSet.add(me.spouse);
+      child.parents = Array.from(parentSet).slice(0,2);
+    });
+  }
+
+  await saveMembers(members);
+
+  document.getElementById('toast').classList.add('show');
+  setTimeout(()=>document.getElementById('toast').classList.remove('show'), 4000);
+
+  ['f-byear','f-dyear','f-parent1','f-parent2','f-spouse','f-children','f-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-gender').value='';
+
+  await refreshNamesList();
+});
+
+// ---------- suggest edit / addition ----------
+async function refreshTargetSelect(){
+  const members = await loadMembers();
+  const select = document.getElementById('s-target');
+  const current = select.value;
+  select.innerHTML = '<option value="">— Новый человек (которого ещё нет в дереве) —</option>' +
+    members.map(m=>{
+      const g = GENDER_LABEL[m.gender || ''] || '';
+      const label = g ? `${m.name} (${g})` : m.name;
+      return `<option value="${m.id}">${escapeHtml(label)}</option>`;
+    }).join('');
+  if(current && [...select.options].some(o=>o.value===current)) select.value = current;
+  toggleNewNameField();
+}
+
+function toggleNewNameField(){
+  const select = document.getElementById('s-target');
+  const field = document.getElementById('s-newname-field');
+  field.style.display = select.value === '' ? 'block' : 'none';
+}
+document.getElementById('s-target').addEventListener('change', toggleNewNameField);
+
+document.getElementById('suggestBtn').addEventListener('click', async ()=>{
+  const select = document.getElementById('s-target');
+  const targetId = select.value;
+  const newName = document.getElementById('s-newname').value.trim();
+
+  if(!targetId && !newName){
+    alert('Укажите имя нового человека или выберите существующего.');
+    return;
+  }
+
+  const fields = {
+    gender: document.getElementById('s-gender').value,
+    byear: document.getElementById('s-byear').value,
+    dyear: document.getElementById('s-dyear').value,
+    parent1: document.getElementById('s-parent1').value.trim(),
+    parent2: document.getElementById('s-parent2').value.trim(),
+    spouse: document.getElementById('s-spouse').value.trim(),
+    children: document.getElementById('s-children').value.trim(),
+    note: document.getElementById('s-note').value.trim(),
+  };
+  const comment = document.getElementById('s-comment').value.trim();
+  const author = document.getElementById('s-author').value.trim();
+
+  const hasAnyField = Object.values(fields).some(v=>v);
+  if(!hasAnyField && !comment){
+    alert('Заполните хотя бы одно поле или комментарий — иначе администратору будет не понятно, что предложить.');
+    return;
+  }
+
+  let targetName = '';
+  if(targetId){
+    const members = await loadMembers();
+    const person = members.find(m=>m.id===targetId);
+    targetName = person ? person.name : '';
+  }
+
+  const suggestions = await loadSuggestions();
+  suggestions.push({
+    id: uid(),
+    isNew: !targetId,
+    targetId: targetId || null,
+    targetName,
+    newName,
+    fields,
+    comment,
+    author,
+    timestamp: new Date().toISOString(),
+  });
+  await saveSuggestions(suggestions);
+
+  const toast = document.getElementById('suggestToast');
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'), 5000);
+
+  ['s-byear','s-dyear','s-parent1','s-parent2','s-spouse','s-children','s-note','s-comment','s-author','s-newname']
+    .forEach(id=>document.getElementById(id).value='');
+  document.getElementById('s-gender').value='';
+  select.value='';
+  toggleNewNameField();
+});
+
+// ---------- admin / moderation ----------
+let adminUnlocked = false;
+
+document.getElementById('adminBtn').addEventListener('click', async ()=>{
+  const val = document.getElementById('admin-code').value.trim();
+  const error = document.getElementById('adminError');
+  if(val === ADMIN_CODE){
+    adminUnlocked = true;
+    document.getElementById('adminLock').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    await refreshAdminPanel();
+  }else{
+    error.classList.add('show');
+  }
+});
+document.getElementById('admin-code').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') document.getElementById('adminBtn').click();
+  document.getElementById('adminError').classList.remove('show');
+});
+
+async function refreshAdminPanel(){
+  if(!adminUnlocked) return;
+  const suggestions = await loadSuggestions();
+  const list = document.getElementById('suggestionsList');
+
+  if(suggestions.length === 0){
+    list.innerHTML = '<div class="empty-note">Пока нет новых предложений. Здесь появятся правки от родственников.</div>';
+    return;
+  }
+
+  const FIELD_LABELS = {
+    gender: 'Пол', byear: 'Год рождения', dyear: 'Год смерти',
+    parent1: 'Родитель 1', parent2: 'Родитель 2', spouse: 'Супруг(а)',
+    children: 'Дети', note: 'Заметка'
+  };
+
+  list.innerHTML = suggestions.map(s=>{
+    const title = s.isNew
+      ? `Новый человек: ${escapeHtml(s.newName || '—')}`
+      : `Изменения: ${escapeHtml(s.targetName || '—')}`;
+
+    const meta = `${s.author ? 'От: ' + escapeHtml(s.author) : 'Автор не указан'} · ${new Date(s.timestamp).toLocaleString('ru-RU')}`;
+
+    const changeLines = Object.entries(s.fields)
+      .filter(([,v])=>v)
+      .map(([k,v])=>`<div><span class="field-name">${FIELD_LABELS[k]}:</span> ${escapeHtml(String(v))}</div>`)
+      .join('');
+
+    return `
+      <div class="suggestion" data-id="${s.id}">
+        <h4>${title}</h4>
+        <div class="meta">${meta}</div>
+        ${changeLines ? `<div class="changes">${changeLines}</div>` : ''}
+        ${s.comment ? `<div class="comment">${escapeHtml(s.comment)}</div>` : ''}
+        <div class="actions">
+          <button class="btn-approve" data-action="approve" data-id="${s.id}">Принять</button>
+          <button class="btn-reject" data-action="reject" data-id="${s.id}">Отклонить</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('button[data-action]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      if(action === 'approve'){ await approveSuggestion(id); }
+      else { await removeSuggestion(id); }
+      await refreshAdminPanel();
+    });
+  });
+}
+
+async function approveSuggestion(id){
+  const suggestions = await loadSuggestions();
+  const suggestion = suggestions.find(s=>s.id===id);
+  if(!suggestion) return;
+
+  const members = await loadMembers();
+  let person;
+  if(suggestion.isNew){
+    person = findOrCreate(members, suggestion.newName || 'Без имени');
+  }else{
+    person = members.find(m=>m.id===suggestion.targetId);
+    if(!person) person = findOrCreate(members, suggestion.targetName || 'Без имени');
+  }
+
+  const f = suggestion.fields;
+  if(f.gender) person.gender = f.gender;
+  if(f.byear) person.birthYear = parseInt(f.byear,10);
+  if(f.dyear) person.deathYear = parseInt(f.dyear,10);
+  if(f.note) person.note = f.note;
+
+  const parentIds = [];
+  if(f.parent1) parentIds.push(findOrCreate(members, f.parent1).id);
+  if(f.parent2) parentIds.push(findOrCreate(members, f.parent2).id);
+  if(parentIds.length){
+    const merged = new Set([...(person.parents||[]), ...parentIds]);
+    person.parents = Array.from(merged).slice(0,2);
+  }
+
+  if(f.spouse){
+    const sp = findOrCreate(members, f.spouse);
+    person.spouse = sp.id;
+    sp.spouse = person.id;
+  }
+
+  if(f.children){
+    f.children.split(',').map(s=>s.trim()).filter(Boolean).forEach(childName=>{
+      const child = findOrCreate(members, childName);
+      const parentSet = new Set([...(child.parents||[]), person.id]);
+      if(person.spouse) parentSet.add(person.spouse);
+      child.parents = Array.from(parentSet).slice(0,2);
+    });
+  }
+
+  await saveMembers(members);
+  await removeSuggestion(id, suggestions);
+}
+
+async function removeSuggestion(id, preloaded){
+  const suggestions = preloaded || await loadSuggestions();
+  await saveSuggestions(suggestions.filter(s=>s.id!==id));
+}
+
+// ---------- tree rendering ----------
+function computeGenerations(members){
+  const byId = {};
+  members.forEach(m=>byId[m.id]=m);
+  const gen = {};
+  members.forEach(m=>gen[m.id]=0);
+
+  for(let pass=0; pass<members.length*2+10; pass++){
+    let changed = false;
+    members.forEach(m=>{
+      const parents = (m.parents||[]).map(id=>byId[id]).filter(Boolean);
+      if(parents.length){
+        const target = Math.max(...parents.map(p=>gen[p.id])) + 1;
+        if(target > gen[m.id]){ gen[m.id] = target; changed = true; }
+      }
+    });
+    // keep spouses on the same generation level
+    members.forEach(m=>{
+      if(m.spouse && byId[m.spouse]){
+        const g = Math.max(gen[m.id], gen[m.spouse]);
+        if(g > gen[m.id]){ gen[m.id] = g; changed = true; }
+        if(g > gen[m.spouse]){ gen[m.spouse] = g; changed = true; }
+      }
+    });
+    if(!changed) break;
+  }
+  return gen;
+}
+
+async function renderTree(){
+  const members = await loadMembers();
+  const container = document.getElementById('treeCard');
+
+  if(members.length === 0){
+    container.innerHTML = `<div class="tree-empty">
+      <div class="seed">🌱</div>
+      <h3>Дерево пока пустое</h3>
+      <p>Как только кто-то заполнит анкету, здесь появится первая ветка.</p>
+    </div>`;
+    return;
+  }
+
+  const byId = {};
+  members.forEach(m=>byId[m.id]=m);
+  const gen = computeGenerations(members);
+  const maxGen = Math.max(...Object.values(gen));
+
+  const generations = [];
+  for(let g=0; g<=maxGen; g++) generations.push([]);
+  members.forEach(m=> generations[gen[m.id]].push(m));
+
+  const NODE_R = 30;
+  const SLOT_W = 150;     // horizontal space reserved per person
+  const SPOUSE_GAP = 14;  // extra gap between spouses
+  const UNIT_GAP = 60;    // gap between sibling units
+  const GEN_HEIGHT = 190; // vertical distance between generation centers
+  const LABEL_H = 80;     // space below circle for text
+  const TOP_MARGIN = 70;
+
+  const positions = {}; // id -> {x,y}
+
+  // build "units": spouse pairs travel together, ordered by avg parent x
+  const genUnits = [];
+  for(let g=0; g<=maxGen; g++){
+    const placed = new Set();
+    const units = [];
+    generations[g].forEach(m=>{
+      if(placed.has(m.id)) return;
+      if(m.spouse && byId[m.spouse] && gen[m.spouse]===g && !placed.has(m.spouse)){
+        units.push([m, byId[m.spouse]]);
+        placed.add(m.id); placed.add(m.spouse);
+      }else{
+        units.push([m]);
+        placed.add(m.id);
+      }
+    });
+    genUnits.push(units);
+  }
+
+  // pass 1: compute a natural width for each unit and an initial center,
+  // generation by generation (parents already positioned by the time we place children)
+  let maxRowWidth = 0;
+  for(let g=0; g<=maxGen; g++){
+    const units = genUnits[g];
+
+    const unitAnchor = (unit)=>{
+      let xs = [];
+      unit.forEach(m=> (m.parents||[]).forEach(pid=>{ if(positions[pid]) xs.push(positions[pid].x); }));
+      return xs.length ? xs.reduce((a,b)=>a+b,0)/xs.length : null;
+    };
+
+    // order: units with a known anchor sorted by anchor, unanchored units appended at the end
+    const anchored = [];
+    const unanchored = [];
+    units.forEach(u=>{
+      const a = unitAnchor(u);
+      if(a===null) unanchored.push(u); else anchored.push([u,a]);
+    });
+    anchored.sort((a,b)=>a[1]-b[1]);
+    const orderedUnits = [...anchored.map(x=>x[0]), ...unanchored];
+
+    // width of each unit
+    const unitWidth = (unit)=> unit.length===2 ? SLOT_W*2 + SPOUSE_GAP : SLOT_W;
+
+    const rowWidth = orderedUnits.reduce((sum,u)=>sum+unitWidth(u),0) + UNIT_GAP*(orderedUnits.length-1);
+    maxRowWidth = Math.max(maxRowWidth, rowWidth);
+
+    let cursor = -rowWidth/2; // temporary, will shift to global coords after we know maxRowWidth
+    const y = TOP_MARGIN + (maxGen-g)*GEN_HEIGHT;
+
+    orderedUnits.forEach(unit=>{
+      const w = unitWidth(unit);
+      if(unit.length===2){
+        positions[unit[0].id] = { x: cursor + SLOT_W/2, y };
+        positions[unit[1].id] = { x: cursor + SLOT_W + SPOUSE_GAP + SLOT_W/2, y };
+      }else{
+        positions[unit[0].id] = { x: cursor + SLOT_W/2, y };
+      }
+      cursor += w + UNIT_GAP;
+    });
+  }
+
+  // shift everything so min x = NODE_R (with small padding)
+  const allX = Object.values(positions).map(p=>p.x);
+  const minX = Math.min(...allX);
+  const shift = NODE_R + 10 - minX;
+  Object.values(positions).forEach(p=> p.x += shift);
+
+  const totalWidth = Math.max(allX.length ? (Math.max(...allX) + shift + NODE_R + 10) : 700, 700);
+  const totalHeight = TOP_MARGIN + maxGen*GEN_HEIGHT + NODE_R + LABEL_H + 30;
+
+  // ---------- build SVG ----------
+  const svgParts = [];
+
+  // parent -> children connectors (drawn first, behind nodes)
+  members.forEach(m=>{
+    const parents = (m.parents||[]).map(pid=>positions[pid] ? {pid, pos:positions[pid]} : null).filter(Boolean);
+    const childPos = positions[m.id];
+    if(!parents.length || !childPos) return;
+
+    const cx = childPos.x;
+    const cy = childPos.y + NODE_R;         // top connection point: bottom edge of child circle
+
+    // anchor x: midpoint between parents (or the single parent's x)
+    const px = parents.reduce((a,p)=>a+p.pos.x,0)/parents.length;
+    // anchor y: just below the parents' row (bottom edge of their circles)
+    const parentBottom = parents[0].pos.y + NODE_R;
+    const branchY = (parentBottom + cy)/2;
+
+    if(parents.length === 2){
+      // draw a short stub from each parent down to the shared horizontal bar
+      parents.forEach(p=>{
+        svgParts.push(
+          `<path d="M ${p.pos.x} ${parentBottom} V ${branchY}" ` +
+          `fill="none" stroke="#9FAE8F" stroke-width="2.5" stroke-linecap="round" opacity="0.75"/>`
+        );
+      });
+    } else {
+      svgParts.push(
+        `<path d="M ${px} ${parentBottom} V ${branchY}" ` +
+        `fill="none" stroke="#9FAE8F" stroke-width="2.5" stroke-linecap="round" opacity="0.75"/>`
+      );
+    }
+
+    // horizontal bar + drop down to the child
+    svgParts.push(
+      `<path d="M ${px} ${branchY} H ${cx} V ${cy}" ` +
+      `fill="none" stroke="#9FAE8F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/>`
+    );
+  });
+
+  // spouse connectors
+  const drawnSpouse = new Set();
+  members.forEach(m=>{
+    if(m.spouse && byId[m.spouse] && !drawnSpouse.has(m.id) && !drawnSpouse.has(m.spouse)){
+      const a = positions[m.id], b = positions[m.spouse];
+      if(a && b){
+        const left = a.x < b.x ? a : b;
+        const right = a.x < b.x ? b : a;
+        svgParts.push(`<line x1="${left.x+NODE_R}" y1="${left.y}" x2="${right.x-NODE_R}" y2="${right.y}" stroke="#D9B36A" stroke-width="2" stroke-dasharray="5 5" opacity="0.85"/>`);
+      }
+      drawnSpouse.add(m.id); drawnSpouse.add(m.spouse);
+    }
+  });
+
+  // nodes
+  members.forEach(m=>{
+    const pos = positions[m.id];
+    if(!pos) return;
+    const gender = m.gender || '';
+    const color = GENDER_COLOR[gender];
+    const genderLabel = GENDER_LABEL[gender];
+    const initials = m.name.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    const years = (m.birthYear || m.deathYear) ? `${m.birthYear || '?'}${m.deathYear ? ' – ' + m.deathYear : ''}` : '';
+    const nameLine = genderLabel ? `${escapeHtml(m.name)} (${genderLabel})` : escapeHtml(m.name);
+
+    svgParts.push(`
+      <g>
+        <circle cx="${pos.x}" cy="${pos.y}" r="${NODE_R}" fill="${color}" fill-opacity="0.55" stroke="${color}" stroke-width="2.5"/>
+        <text x="${pos.x}" y="${pos.y+6}" text-anchor="middle" class="node-name" font-size="16" fill="#3D3530">${escapeHtml(initials)}</text>
+        <text x="${pos.x}" y="${pos.y+NODE_R+22}" text-anchor="middle" class="node-name" font-size="15" fill="#3D3530">${nameLine}</text>
+        ${years ? `<text x="${pos.x}" y="${pos.y+NODE_R+40}" text-anchor="middle" class="node-years" font-size="12" fill="#8A7E72">${escapeHtml(years)}</text>` : ''}
+        ${m.note ? `<text x="${pos.x}" y="${pos.y+NODE_R+(years?58:40)}" text-anchor="middle" class="node-note" font-size="14" fill="#8A7E72">${escapeHtml(truncate(m.note,28))}</text>` : ''}
+      </g>
+    `);
+  });
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${totalWidth} ${totalHeight}" width="100%" style="display:block; min-width:${Math.max(700, totalWidth*0.55)}px;">
+      ${svgParts.join('')}
+    </svg>
+  `;
+}
+
+// ---------- init ----------
+refreshNamesList();
+</script>
+</body>
+</html>
