@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Тест сервера</title>
+<style>body{font:14px system-ui;padding:20px} .ok{color:#2a7a2a} .fail{color:#b00;font-weight:bold} pre{white-space:pre-wrap}</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+</head>
+<body>
+<h1>Тест серверной части (src/worker.js)</h1>
+<p>Worker запускается прямо в браузере: база D1 — настоящий SQLite (sql.js), хранилище KV — в памяти.</p>
+<pre id="out">Выполняется…</pre>
+<script type="module">
+const results = [];
+const ok = (name, cond, info = '') => results.push({ name, ok: !!cond, info: typeof info === 'string' ? info : JSON.stringify(info) });
+
+// ---------- заглушки окружения Cloudflare ----------
+const RealResponse = window.Response;
+class FakeResponse {
+  constructor(body = null, init = {}) {
+    this.status = init.status ?? 200;
+    this.headers = new Headers();
+    const src = init.headers instanceof Headers ? [...init.headers] : Object.entries(init.headers || {});
+    for (const [k, v] of src) this.headers.append(k, v);
+    if (init.headers instanceof Headers && init.headers.getSetCookie) {
+      this.headers.delete('set-cookie');
+      for (const c of init.headers.getSetCookie()) this.headers.append('Set-Cookie', c);
+    }
+    this._body = body;
+  }
+  get ok() { return this.status >= 200 && this.status < 300; }
+  async arrayBuffer() {
+    const b = this._body;
+    if (b === null) return new ArrayBuffer(0);
+    if (typeof b === 'string') return new TextEncoder().encode(b).buffer;
+    if (b instanceof Uint8Array) return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+    return new RealResponse(b).arrayBuffer();
+  }
+  async text() { return new TextDecoder().decode(await this.arrayBuffer()); }
+  async json() { return JSON.parse(await this.text()); }
+}
+
+class D1 {
+  constructor(SQL) { this.db = new SQL.Database(); this.queries = 0; }
+  prepare(sql) { return new Stmt(this, sql, []); }
+  async batch(stmts) {
+    this.db.exec('BEGIN');
+    try { const r = stmts.map(s => s._exec()); this.db.exec('COMMIT'); return r; }
+    catch (e) { this.db.exec('ROLLBACK'); throw e; }
+  }
+}
+class Stmt {
+  constructor(d1, sql, params) { this.d1 = d1; this.sql = sql; this.params = params; }
+  bind(...p) { return new Stmt(this.d1, this.sql, p); }
+  _exec() {
+    this.d1.queries++;
+    const st = this.d1.db.prepare(this.sql);
+    st.bind(this.params.map(v => v === undefined ? null : typeof v === 'boolean' ? (v ? 1 : 0) : v));
+    const results = [];
+    while (st.step()) results.push(st.getAsObject());
+    st.free();
+    return { results, success: true, meta: { changes: this.d1.db.getRowsModified() } };
+  }
+  async first(col) { const r = this._exec().results[0]; return r ? (col ? r[col] : r) : null; }
+  async all() { return this._exec(); }
+  async run() { return this._exec(); }
+}
+class KV {
+  constructor() { this.m = new Map(); }
+  async put(k, v, opts) { this.m.set(k, { v: new Uint8Array(v instanceof ArrayBuffer ? v.slice(0) : await new RealResponse(v).arrayBuffer()), meta: opts?.metadata }); }
+  async get(k) { const e = this.m.get(k); return e ? e.v : null; }
+  async delete(k) { this.m.delete(k); }
+}
+
+const SQL = await initSqlJs({ locateFile: f => 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/' + f });
+const DB = new D1(SQL);
+const PHOTOS = new KV();
+const env = {
+  DB, PHOTOS,
+  ASSETS: { fetch: () => new FakeResponse('<html>static</html>', { headers: { 'Content-Type': 'text/html' } }) },
+  ADMIN_PASSWORD: 'Секрет-Админа-2026',
+  FAMILY_CODE: 'Наша Семья 2026',
+};
+
+window.Response = FakeResponse;
+const worker = (await import('../src/worker.js?' + Date.now())).default;
+
+const ORIGIN = 'https://gross-tree.example';
+let maxQueries = 0, maxQueriesPath = '';
+async function call(method, path, { body, form, cookies = {}, ip = '10.0.0.1', origin, envOverride } = {}) {
+  const init = { method };
+  if (form) init.body = form;
+  else if (body !== undefined && method !== 'GET') init.body = JSON.stringify(body);
+  const real = new Request(ORIGIN + path, init);
+  const headers = new Headers();
+  for (const [k, v] of real.headers) headers.set(k, v);
+  const ck = Object.entries(cookies).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join('; ');
+  if (ck) headers.set('Cookie', ck);
+  headers.set('CF-Connecting-IP', ip);
+  if (origin) headers.set('Origin', origin);
+  const req = { method, url: ORIGIN + path, headers, text: () => real.text(), json: () => real.json(), formData: () => real.formData() };
+  DB.queries = 0;
+  const res = await worker.fetch(req, envOverride || env);
+  if (DB.queries > maxQueries) { maxQueries = DB.queries; maxQueriesPath = method + ' ' + path; }
+  const type = res.headers.get('Content-Type') || '';
+  const data = type.includes('json') ? await res.json() : null;
+  const setCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+  return { status: res.status, data, res, setCookies };
+}
+const cookieFrom = (r, name) => {
+  const c = r.setCookies.find(s => s.startsWith(name + '='));
+  return c ? decodeURIComponent(c.split(';')[0].slice(name.length + 1)) : null;
+};
+async function jpegBlob(w = 40, h = 30, color = '#4a7') {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, w, h);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+}
+async function pngBlob() {
+  const c = document.createElement('canvas'); c.width = 10; c.height = 10;
+  return new Promise(r => c.toBlob(r, 'image/png'));
+}
+
+try {
+  // ---------- первый запуск ----------
+  let r = await call('GET', '/api/session');
+  ok('сессия без cookie', r.status === 200 && r.data.family === false && r.data.admin === false, r.data);
+  const tables = DB.db.exec(`SELECT name FROM sqlite_master WHERE type='table'`)[0].values.flat();
+  ok('таблицы созданы автоматически', ['people', 'parent_child', 'unions', 'photos', 'submissions', 'settings', 'sessions', 'attempts', 'uploads'].every(t => tables.includes(t)), tables);
+  r = await call('GET', '/');
+  ok('статика отдаётся через ASSETS', r.status === 200);
+  r = await call('GET', '/api/tree');
+  ok('дерево без кода закрыто', r.status === 401 && r.data.code === 'locked', r.data);
+
+  r = await call('POST', '/api/unlock', { body: { code: 'Наша Семья 2026' }, envOverride: { ...env, FAMILY_CODE: undefined } });
+  ok('если код не задан — понятная ошибка', r.status === 503 && r.data.code === 'not_configured', r.data);
+
+  // ---------- семейный код ----------
+  r = await call('POST', '/api/unlock', { body: { code: 'не тот' } });
+  ok('неверный код', r.status === 401 && r.data.code === 'bad_code', r.data);
+  r = await call('POST', '/api/unlock', { body: { code: '  наша   СЕМЬЯ 2026 ' } });
+  const fam = cookieFrom(r, 'ft_s');
+  ok('верный код (регистр и пробелы не важны) → cookie', r.status === 200 && !!fam, r.data);
+  ok('cookie защищена (HttpOnly, Secure, SameSite)', /HttpOnly/.test(r.setCookies[0]) && /Secure/.test(r.setCookies[0]) && /SameSite=Lax/.test(r.setCookies[0]), r.setCookies[0]);
+  r = await call('GET', '/api/session', { cookies: { ft_s: fam } });
+  ok('сессия родственника', r.data.family === true && r.data.admin === false, r.data);
+  r = await call('GET', '/api/tree', { cookies: { ft_s: fam } });
+  ok('пустое дерево', r.status === 200 && r.data.title === 'Семейное дерево' && r.data.people.length === 0, r.data);
+  r = await call('GET', '/api/tree', { cookies: { ft_s: 'fake-token-123' } });
+  ok('поддельная cookie не работает', r.status === 401);
+
+  // ---------- заявки ----------
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam }, body: { kind: 'new_person', payload: { person: { first_name: 'Анна' } }, author: 'Анна', comment: 'Привет' } });
+  ok('заявка отправлена', r.status === 200 && !!r.data.id, r.data);
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam }, body: { kind: 'drop_all', payload: {} } });
+  ok('неизвестный тип заявки отклонён', r.status === 400);
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam }, body: { kind: 'edit_person', target: 'нет-такого', payload: {} } });
+  ok('правка несуществующего человека отклонена', r.status === 404);
+  r = await call('POST', '/api/submissions', { body: { kind: 'new_person', payload: {} } });
+  ok('заявка без кода отклонена', r.status === 401);
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam }, body: { kind: 'new_person', payload: { bio: 'x'.repeat(250000) } } });
+  ok('слишком большая заявка отклонена', r.status === 413);
+
+  // ---------- админ ----------
+  r = await call('GET', '/api/admin/pending-count', { cookies: { ft_s: fam } });
+  ok('родственник не может в админку', r.status === 403);
+  r = await call('POST', '/api/admin/login', { body: { password: 'неверный' } });
+  ok('неверный пароль админа', r.status === 401);
+  r = await call('POST', '/api/admin/login', { body: { password: 'Секрет-Админа-2026' } });
+  const adm = cookieFrom(r, 'ft_a');
+  ok('вход админа', r.status === 200 && !!adm);
+  const A = { cookies: { ft_a: adm } };
+  r = await call('GET', '/api/session', A);
+  ok('админ видит дерево и админку', r.data.family && r.data.admin, r.data);
+  r = await call('GET', '/api/admin/pending-count', A);
+  ok('счётчик заявок', r.data.count === 1, r.data);
+  r = await call('GET', '/api/admin/submissions?status=pending', A);
+  ok('список заявок с разобранным payload', r.data.length === 1 && r.data[0].payload.person.first_name === 'Анна', r.data);
+  const subId = r.data[0].id;
+
+  r = await call('POST', '/api/admin/people', { ...A, body: { first_name: 'Иван', last_name: 'Петров', gender: 'm', is_deceased: true, birth_approx: true, birth_date: '1920', evil: 'x' } });
+  const ivan = r.data;
+  ok('создание человека', r.status === 200 && ivan.first_name === 'Иван' && ivan.is_deceased === true && ivan.birth_approx === true && !('evil' in ivan), ivan);
+  r = await call('POST', '/api/admin/people', { ...A, body: { first_name: 'Мария', gender: 'f' } });
+  const maria = r.data;
+  r = await call('POST', '/api/admin/people', { ...A, body: { first_name: 'Пётр', gender: 'x' } });
+  const petr = r.data;
+  ok('неверный пол заменяется на «не указан»', petr.gender === '', petr);
+  r = await call('PATCH', '/api/admin/people/' + petr.id, { ...A, body: { last_name: 'Петров', is_deceased: false } });
+  ok('правка человека', r.data.last_name === 'Петров' && r.data.first_name === 'Пётр' && r.data.is_deceased === false, r.data);
+  r = await call('POST', '/api/admin/unions', { ...A, body: { partner1_id: ivan.id, partner2_id: maria.id, status: 'married' } });
+  const union = r.data;
+  ok('союз', !!union.id && union.status === 'married', union);
+  r = await call('PATCH', '/api/admin/unions/' + union.id, { ...A, body: { status: 'divorced' } });
+  r = await call('POST', '/api/admin/parent-child', { ...A, body: { parent_id: ivan.id, child_id: petr.id } });
+  r = await call('POST', '/api/admin/parent-child', { ...A, body: { parent_id: maria.id, child_id: petr.id } });
+  r = await call('POST', '/api/admin/parent-child', { ...A, body: { parent_id: maria.id, child_id: petr.id, kind: 'adopted' } });
+  ok('повторная связь обновляется, а не дублируется', r.status === 200);
+  r = await call('POST', '/api/admin/parent-child', { ...A, body: { parent_id: ivan.id, child_id: ivan.id } });
+  ok('нельзя быть родителем себе', r.status === 400);
+  r = await call('GET', '/api/tree', { cookies: { ft_s: fam } });
+  ok('дерево с данными', r.data.people.length === 3 && r.data.parent_child.length === 2 && r.data.unions[0].status === 'divorced' && r.data.parent_child.some(x => x.kind === 'adopted'), r.data);
+  ok('булевы поля в дереве — true/false', r.data.people.find(p => p.id === ivan.id).is_deceased === true);
+  r = await call('PATCH', '/api/admin/submissions/' + subId, { ...A, body: { status: 'approved' } });
+  r = await call('GET', '/api/admin/pending-count', A);
+  ok('заявка принята', r.data.count === 0);
+
+  // ---------- фото ----------
+  const fd = () => { const f = new FormData(); return f; };
+  let form = fd(); form.append('full', await jpegBlob(80, 60), 'a.jpg'); form.append('thumb', await jpegBlob(20, 20), 't.jpg');
+  r = await call('POST', '/api/uploads', { cookies: { ft_s: fam }, form });
+  const up = r.data;
+  ok('загрузка фото родственником', r.status === 200 && /^p\/[0-9a-f-]{36}\.jpg$/.test(up.path) && /_t\.jpg$/.test(up.thumb_path), up);
+  ok('фото лежат в KV', PHOTOS.m.has(up.path) && PHOTOS.m.has(up.thumb_path));
+  form = fd(); form.append('full', await pngBlob(), 'a.png'); form.append('thumb', await pngBlob(), 't.png');
+  r = await call('POST', '/api/uploads', { cookies: { ft_s: fam }, form });
+  ok('не-JPEG отклоняется', r.status === 415, r.data);
+  form = fd(); form.append('full', await jpegBlob(), 'a.jpg'); form.append('thumb', await jpegBlob(), 't.jpg');
+  r = await call('POST', '/api/uploads', { form });
+  ok('загрузка без кода запрещена', r.status === 401);
+  r = await call('GET', '/photos/' + up.path, { cookies: { ft_s: fam } });
+  const bytes = new Uint8Array(await r.res.arrayBuffer());
+  ok('фото открывается с cookie', r.status === 200 && r.res.headers.get('Content-Type') === 'image/jpeg' && bytes[0] === 0xFF && bytes[1] === 0xD8, r.status);
+  ok('фото кэшируется браузером', /immutable/.test(r.res.headers.get('Cache-Control')));
+  r = await call('GET', '/photos/' + up.path);
+  ok('фото без кода закрыто', r.status === 401);
+  r = await call('GET', '/photos/p%2F..%2F..%2Fsecret', { cookies: { ft_s: fam } });
+  const r2 = await call('GET', '/photos/other/key.jpg', { cookies: { ft_s: fam } });
+  ok('чужие пути не открываются', r.status === 404 && r2.status === 404, [r.status, r2.status]);
+
+  r = await call('POST', '/api/admin/photos', { ...A, body: { person_id: ivan.id, path: up.path, thumb_path: up.thumb_path, caption: 'Свадьба' } });
+  const photo = r.data;
+  ok('фото прикреплено', photo.caption === 'Свадьба');
+  await call('PATCH', '/api/admin/people/' + ivan.id, { ...A, body: { main_photo_id: photo.id } });
+  form = fd(); form.append('full', await jpegBlob(), 'a.jpg'); form.append('thumb', await jpegBlob(), 't.jpg');
+  const up2 = (await call('POST', '/api/uploads', { cookies: { ft_s: fam }, form })).data;
+  await call('POST', '/api/admin/delete-uploads', { ...A, body: { paths: [up.path, up.thumb_path, up2.path, up2.thumb_path] } });
+  ok('удаление загрузок не трогает прикреплённые фото', PHOTOS.m.has(up.path) && !PHOTOS.m.has(up2.path) && !PHOTOS.m.has(up2.thumb_path));
+  r = await call('DELETE', '/api/admin/photos/' + photo.id, A);
+  r = await call('GET', '/api/tree', A);
+  ok('удаление фото: файл, запись и «главное фото»', !PHOTOS.m.has(up.path) && r.data.photos.length === 0 && r.data.people.find(p => p.id === ivan.id).main_photo_id === null, r.data.people);
+
+  // много фото у одного человека — проверка лимита запросов к базе
+  const many = [];
+  for (let i = 0; i < 30; i++) {
+    form = fd(); form.append('full', await jpegBlob(), 'a.jpg'); form.append('thumb', await jpegBlob(), 't.jpg');
+    const u = (await call('POST', '/api/uploads', { ...A, form })).data;
+    await call('POST', '/api/admin/photos', { ...A, body: { person_id: petr.id, path: u.path, thumb_path: u.thumb_path } });
+    many.push(u);
+  }
+  r = await call('DELETE', '/api/admin/people/' + petr.id, A);
+  ok('удаление человека с 30 фото', r.status === 200 && many.every(u => !PHOTOS.m.has(u.path)), r.data);
+  r = await call('GET', '/api/tree', A);
+  ok('…связи и фото удалены', r.data.people.length === 2 && r.data.parent_child.length === 0 && r.data.photos.length === 0, r.data);
+
+  // ---------- импорт и экспорт ----------
+  r = await call('POST', '/api/admin/import', { ...A, body: {
+    people: [{ id: 'g1', first_name: 'Фёдор', gender: 'm', is_deceased: true }, { id: 'g2', first_name: 'Прасковья', gender: 'f' }, { id: 'g3', first_name: 'Илья', bio: 'Строка 1\nСтрока 2' }],
+    unions: [{ id: 'gu', partner1_id: 'g1', partner2_id: 'g2', status: 'married' }],
+    parent_child: [{ parent_id: 'g1', child_id: 'g3' }, { parent_id: 'g2', child_id: 'g3' }, { parent_id: 'g1', child_id: 'g3' }],
+  } });
+  ok('импорт', r.status === 200 && r.data.people === 3, r.data);
+  r = await call('GET', '/api/tree', A);
+  const ilya = r.data.people.find(p => p.id === 'g3');
+  ok('…данные импорта на месте', r.data.people.length === 5 && r.data.parent_child.length === 2 && ilya.bio === 'Строка 1\nСтрока 2' && r.data.people.find(p => p.id === 'g1').is_deceased === true, r.data);
+  r = await call('GET', '/api/admin/export', A);
+  ok('экспорт без секретных настроек', r.data.people.length === 5 && !r.data.settings.some(s => /family_code/.test(s.key)), r.data.settings);
+
+  // ---------- смена семейного кода ----------
+  r = await call('PUT', '/api/admin/settings', { ...A, body: { title: 'Род Петровых' } });
+  r = await call('PUT', '/api/admin/family-code', { ...A, body: { code: 'ab' } });
+  ok('короткий код не принимается', r.status === 400);
+  r = await call('PUT', '/api/admin/family-code', { ...A, body: { code: 'Новый Код Ёлка' } });
+  ok('код изменён', r.status === 200);
+  r = await call('GET', '/api/tree', { cookies: { ft_s: fam } });
+  ok('старые сессии родственников сброшены', r.status === 401);
+  r = await call('POST', '/api/unlock', { body: { code: 'Наша Семья 2026' } });
+  ok('старый код не работает', r.status === 401);
+  r = await call('POST', '/api/unlock', { body: { code: 'новый код елка' } });
+  const fam2 = cookieFrom(r, 'ft_s');
+  ok('новый код работает (ё = е)', r.status === 200 && !!fam2);
+  r = await call('GET', '/api/tree', { cookies: { ft_s: fam2 } });
+  ok('название обновилось', r.data.title === 'Род Петровых');
+  r = await call('GET', '/api/admin/pending-count', A);
+  ok('админ остался в системе', r.status === 200);
+
+  // ---------- защита ----------
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam2 }, origin: 'https://evil.example', body: { kind: 'new_person', payload: {} } });
+  ok('запрос с чужого сайта отклонён', r.status === 403);
+  r = await call('POST', '/api/submissions', { cookies: { ft_s: fam2 }, origin: ORIGIN, body: { kind: 'new_person', payload: { person: { first_name: 'Ок' } } } });
+  ok('запрос со своего сайта проходит', r.status === 200);
+  for (let i = 0; i < 30; i++) await call('POST', '/api/unlock', { ip: '203.0.113.9', body: { code: 'подбор' + i } });
+  r = await call('POST', '/api/unlock', { ip: '203.0.113.9', body: { code: 'новый код елка' } });
+  ok('после 30 ошибок с одного адреса — пауза', r.status === 429, r.data);
+  r = await call('POST', '/api/unlock', { ip: '198.51.100.4', body: { code: 'новый код елка' } });
+  ok('с другого адреса вход работает', r.status === 200);
+  for (let i = 0; i < 10; i++) await call('POST', '/api/admin/login', { ip: '203.0.113.10', body: { password: 'x' + i } });
+  r = await call('POST', '/api/admin/login', { ip: '203.0.113.10', body: { password: 'Секрет-Админа-2026' } });
+  ok('подбор пароля админа ограничен', r.status === 429);
+  r = await call('POST', '/api/logout', { cookies: { ft_s: fam2 } });
+  r = await call('GET', '/api/tree', { cookies: { ft_s: fam2 } });
+  ok('выход закрывает доступ', r.status === 401);
+  r = await call('GET', '/api/nope', A);
+  ok('неизвестный адрес — 404 в JSON', r.status === 404 && r.data.error);
+  ok(`запросов к базе за вызов < 50 (макс. ${maxQueries}: ${maxQueriesPath})`, maxQueries < 50);
+
+  // ---------- клиентский код сайта против этого сервера ----------
+  window.Response = RealResponse;
+  const jar = {};
+  const realFetch = window.fetch;
+  window.fetch = async (path, init = {}) => {
+    window.Response = FakeResponse;
+    try {
+      const method = init.method || 'GET';
+      const r = await call(method, path, {
+        cookies: jar, origin: ORIGIN, ip: '192.0.2.50',
+        form: init.body instanceof FormData ? init.body : undefined,
+        body: init.body && !(init.body instanceof FormData) ? JSON.parse(init.body) : undefined,
+      });
+      for (const c of r.setCookies) {
+        const [kv, ...attrs] = c.split(';');
+        const [k, v] = [kv.slice(0, kv.indexOf('=')), decodeURIComponent(kv.slice(kv.indexOf('=') + 1))];
+        if (/Max-Age=0/.test(attrs.join(';'))) delete jar[k]; else jar[k] = v;
+      }
+      return r.res;
+    } finally { window.Response = RealResponse; }
+  };
+  const { createBackend } = await import('../public/js/backend.js');
+  const { buildModel } = await import('../public/js/model.js');
+  const { applyChange } = await import('../public/js/apply.js');
+  const be = await createBackend();
+  ok('сайт определил настоящий сервер', be.mode === 'cloudflare' && be.session.unlocked === false);
+  let u = await be.unlock('неверно');
+  ok('сайт: неверный код', !u.ok && u.error === 'bad_code');
+  u = await be.unlock('Новый код ёлка');
+  ok('сайт: вход по коду', u.ok && !!jar.ft_s);
+  let tree = await be.getTree();
+  ok('сайт: дерево загрузилось', tree.ok && tree.data.title === 'Род Петровых');
+  const subPayload = { person: { first_name: 'Ева', gender: 'f' }, relations: { add: [{ type: 'parent', ref: { id: 'g3' } }, { type: 'parent', ref: { new: { first_name: 'Ольга', last_name: '', patronymic: '', gender: 'f', birth_date: '' } } }], remove: [], update: [] }, photos: [] };
+  const sid = await be.submit({ kind: 'new_person', payload: subPayload, author: 'Тест', comment: '' });
+  ok('сайт: заявка', !!sid);
+  const login = await be.signIn('Секрет-Админа-2026');
+  ok('сайт: вход админа', login.ok && (await be.adminSession()) !== null);
+  ok('сайт: счётчик заявок', (await be.pendingCount()) === 2);
+  const subs = await be.listSubmissions('pending');
+  const evaSub = subs.find(s => s.id === sid);
+  tree = await be.getTree();
+  const newId = await applyChange(be, buildModel(tree.data), { payload: evaSub.payload });
+  await be.reviewSubmission(sid, 'approved');
+  tree = await be.getTree();
+  const eva = tree.data.people.find(p => p.id === newId);
+  const evaParents = tree.data.parent_child.filter(x => x.child_id === newId).map(x => tree.data.people.find(p => p.id === x.parent_id)?.first_name).sort();
+  ok('сайт: принятие заявки создало человека и связи', eva && eva.first_name === 'Ева' && evaParents.join(',') === 'Илья,Ольга', evaParents);
+  const pic = await be.uploadPhoto({ full: await jpegBlob(100, 80), thumb: await jpegBlob(30, 30) });
+  await applyChange(be, buildModel(tree.data), { targetId: newId, payload: { person: {}, relations: {}, photos: [{ ...pic, caption: 'Портрет' }] } });
+  tree = await be.getTree();
+  ok('сайт: фото добавлено и стало главным', tree.data.photos.length === 1 && tree.data.people.find(p => p.id === newId).main_photo_id === tree.data.photos[0].id);
+  ok('сайт: адрес фото', be.photoUrl(pic.path) === '/photos/' + pic.path);
+  await be.bulkImport({ people: [{ id: 'x1', first_name: 'Импорт' }], unions: [], parent_child: [] });
+  tree = await be.getTree();
+  ok('сайт: импорт', tree.data.people.some(p => p.id === 'x1'));
+  await be.signOut();
+  ok('сайт: выход админа', (await be.adminSession()) === null && (await be.getTree()).ok);
+  await be.lock();
+  ok('сайт: выход на устройстве', (await be.getTree()).error === 'locked');
+  window.fetch = realFetch;
+} catch (e) {
+  ok('ОШИБКА ТЕСТА', false, e.stack || e.message);
+}
+window.Response = RealResponse;
+
+const fails = results.filter(r => !r.ok);
+window.__worker = { total: results.length, failed: fails.length, fails };
+document.getElementById('out').innerHTML = results.map(r => `<span class="${r.ok ? 'ok' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name}</span>${r.ok ? '' : '  → ' + r.info.slice(0, 500)}`).join('\n') + `\n\nИтого: ${results.length - fails.length}/${results.length}`;
+</script>
+</body>
+</html>

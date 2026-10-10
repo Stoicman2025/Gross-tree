@@ -1,20 +1,29 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gross-tree",
-  "main": "worker.js",
+  "main": "src/worker.js",
   "compatibility_date": "2026-08-20",
   "observability": {
     "enabled": true
   },
+  // Сайт: публикуется только папка public (серверный код и настройки наружу не попадают)
   "assets": {
-    "directory": ".",
+    "directory": "./public",
     "binding": "ASSETS"
   },
+  // База данных с людьми, связями и заявками (уже создана ранее)
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "family-tree-db",
       "database_id": "3384397a-4722-4f19-85fb-02e1bfd87012"
+    }
+  ],
+  // Хранилище фотографий (Workers KV «family-tree-photos»)
+  "kv_namespaces": [
+    {
+      "binding": "PHOTOS",
+      "id": "140dd1f4201640598890ad590e40633b"
     }
   ]
 }

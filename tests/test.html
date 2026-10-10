@@ -1,0 +1,204 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><title>Тесты</title>
+<style>body{font:14px system-ui;padding:20px} .ok{color:#2a7a2a} .fail{color:#b00;font-weight:bold} pre{white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>Тесты логики</h1>
+<pre id="out">Выполняется…</pre>
+<script type="module">
+import { buildModel } from '../public/js/model.js';
+import { layoutFamily, layoutHourglass } from '../public/js/layout.js';
+import { relationship, bloodTerm, genitive } from '../public/js/kinship.js';
+import { exportGedcom, parseGedcom, parseGedDate, decodeGedcomBuffer } from '../public/js/gedcom.js';
+import { demoSeed } from '../public/js/demo-seed.js';
+import { parseNameInput, guessGender, formatDate, lifeYears } from '../public/js/util.js';
+import { buildPayload, baseState, overlay } from '../public/js/ui/person-form.js';
+
+const results = [];
+const eq = (name, got, exp) => results.push({ name, ok: JSON.stringify(got) === JSON.stringify(exp), got, exp });
+const ok = (name, cond, info = '') => results.push({ name, ok: !!cond, got: info });
+
+// ---------- родство на демо-семье ----------
+const demo = demoSeed();
+const m = buildModel(demo);
+const R = (a, b) => relationship(m, a, b).text;
+eq('Николай для Артёма', R('d-art', 'd-nik'), 'прадедушка');
+eq('Ирина для Артёма', R('d-art', 'd-ira'), 'тётя');
+eq('Павел для Дмитрия', R('d-dima', 'd-pav'), 'двоюродный брат');
+eq('Артём для Павла', R('d-pav', 'd-art'), 'двоюродный племянник');
+eq('Андрей для Дмитрия', R('d-dima', 'd-andr'), 'дядя');
+eq('Андрей для Артёма', R('d-art', 'd-andr'), 'двоюродный дедушка');
+eq('Артём для Андрея', R('d-andr', 'd-art'), 'внучатый племянник');
+eq('Елена для Николая', R('d-nik', 'd-elena'), 'невестка');
+eq('Николай для Елены', R('d-elena', 'd-nik'), 'свёкор');
+eq('Анна для Елены', R('d-elena', 'd-anna'), 'свекровь');
+eq('Михаил для Николая', R('d-nik', 'd-mih'), 'сват');
+eq('Вера для Анны', R('d-anna', 'd-vera'), 'сватья');
+eq('Виктор для Сергея', R('d-serg', 'd-vik'), 'зять (муж сестры)');
+eq('Марина для Ирины', R('d-ira', 'd-mar'), 'невестка (жена брата)');
+eq('Ирина для Марины', R('d-mar', 'd-ira'), 'золовка (сестра мужа)');
+eq('Андрей для Сергея', R('d-serg', 'd-andr'), 'шурин (брат жены)');
+eq('Михаил для Сергея', R('d-serg', 'd-mih'), 'тесть');
+eq('Сергей для Елены', R('d-elena', 'd-serg'), 'муж');
+eq('Ирина для Дмитрия', R('d-dima', 'd-ira'), 'сестра');
+eq('Софья для Николая', R('d-nik', 'd-sof'), 'правнучка');
+eq('Павел для Артёма', R('d-art', 'd-pav'), 'двоюродный дядя');
+eq('Марина для Павла', R('d-pav', 'd-mar'), 'жена двоюродного брата');
+eq('Виктор для Ирины', R('d-ira', 'd-vik'), 'муж тёти');
+
+// ---------- термины ----------
+eq('троюродная сестра', bloodTerm(3, 3, 'f'), 'троюродная сестра');
+eq('четвероюродный брат', bloodTerm(4, 4, 'm'), 'четвероюродный брат');
+eq('прапрадедушка', bloodTerm(4, 0, 'm'), 'прапрадедушка');
+eq('двоюродная прабабушка', bloodTerm(4, 1, 'f'), 'двоюродная прабабушка');
+eq('троюродный дедушка', bloodTerm(4, 2, 'm'), 'троюродный дедушка');
+eq('троюродный дядя', bloodTerm(4, 3, 'm'), 'троюродный дядя');
+eq('правнучатый племянник', bloodTerm(1, 4, 'm'), 'правнучатый племянник');
+eq('двоюродная внучатая племянница', bloodTerm(2, 4, 'f'), 'двоюродная внучатая племянница');
+eq('брат по отцу', bloodTerm(1, 1, 'm', 'father'), 'брат по отцу');
+eq('пол неизвестен', bloodTerm(1, 0, ''), 'отец / мать');
+eq('родительный', genitive('двоюродная внучатая племянница'), 'двоюродной внучатой племянницы');
+eq('родительный пра', genitive('прадедушка'), 'прадедушки');
+
+// ---------- утилиты ----------
+eq('ФИО: Имя Фамилия', parseNameInput('Иван Петров'), { first_name: 'Иван', patronymic: '', last_name: 'Петров' });
+eq('ФИО: Фамилия Имя Отчество', parseNameInput('Петров Иван Сергеевич'), { first_name: 'Иван', patronymic: 'Сергеевич', last_name: 'Петров' });
+eq('ФИО: Имя Отчество Фамилия', parseNameInput('Анна Ивановна Смирнова'), { first_name: 'Анна', patronymic: 'Ивановна', last_name: 'Смирнова' });
+eq('пол по отчеству', guessGender({ first_name: 'Саша', patronymic: 'Петровна' }), 'f');
+eq('пол по фамилии', guessGender({ first_name: 'Женя', last_name: 'Иванова' }), 'f');
+eq('пол Илья', guessGender({ first_name: 'Илья' }), 'm');
+eq('дата полная', formatDate('1985-03-12'), '12 марта 1985');
+eq('дата примерная', formatDate('1920', true), 'около 1920');
+eq('годы жизни', lifeYears({ birth_date: '1920', is_deceased: true, death_date: '' }), '1920 – ?');
+eq('годы жив', lifeYears({ birth_date: '1990-01-01' }), 'р. 1990');
+
+// ---------- GEDCOM ----------
+const ged = exportGedcom(m);
+const parsed = parseGedcom(ged);
+eq('GEDCOM: люди', parsed.people.length, demo.people.length);
+eq('GEDCOM: пары', parsed.unions.length, demo.unions.length);
+eq('GEDCOM: родитель-ребёнок', parsed.parent_child.length, demo.parent_child.length);
+const anna = parsed.people.find(p => p.first_name === 'Анна');
+eq('GEDCOM: девичья фамилия', [anna.last_name, anna.maiden_name, anna.patronymic], ['Соколова', 'Белова', 'Петровна']);
+eq('GEDCOM: примерная дата', [anna.birth_date, anna.birth_approx], ['1924', true]);
+eq('GEDCOM: дата', parsed.people.find(p => p.first_name === 'Николай').birth_date, '1921-05-09');
+ok('GEDCOM: биография', parsed.people.find(p => p.first_name === 'Николай').bio.includes('Праги'));
+eq('GED дата BET', parseGedDate('BET 1920 AND 1925'), { date: '1920', approx: true });
+eq('GED дата месяц', parseGedDate('MAR 1985'), { date: '1985-03', approx: false });
+const m2 = buildModel({ people: parsed.people, parent_child: parsed.parent_child, unions: parsed.unions, photos: [] });
+const nik2 = [...m2.people.values()].find(p => p.first_name === 'Артём');
+const nikk = [...m2.people.values()].find(p => p.first_name === 'Николай');
+eq('GEDCOM: родство после импорта', relationship(m2, nik2.id, nikk.id).text, 'прадедушка');
+const ascii = s => [...s].map(c => c.charCodeAt(0));
+const cp1251 = new Uint8Array([...ascii('0 HEAD\n1 CHAR ANSI\n0 @I1@ INDI\n1 NAME '), 0xC8, 0xE2, 0xE0, 0xED, 0x20, 0x2F, 0xCF, 0xE5, 0xF2, 0xF0, 0xEE, 0xE2, 0x2F, 0x0A, ...ascii('0 TRLR\n')]);
+const p1251 = parseGedcom(decodeGedcomBuffer(cp1251.buffer));
+eq('GEDCOM: Windows-1251', [p1251.people[0].first_name, p1251.people[0].last_name], ['Иван', 'Петров']);
+const pm = parseGedcom('0 HEAD\n0 @I1@ INDI\n1 NAME Прасковья /Громова/\n1 NAME Прасковья /Лапина/\n2 TYPE birth\n1 SEX F\n0 TRLR\n');
+eq('GEDCOM: девичья через TYPE birth', [pm.people[0].last_name, pm.people[0].maiden_name], ['Громова', 'Лапина']);
+const pm2 = parseGedcom('0 HEAD\n0 @I1@ INDI\n1 NAME Мария /Петрова/\n2 _MARNM Иванова\n0 TRLR\n');
+eq('GEDCOM: девичья через _MARNM', [pm2.people[0].last_name, pm2.people[0].maiden_name], ['Иванова', 'Петрова']);
+
+// ---------- форма: сборка изменений ----------
+const st = baseState(m, 'd-ira');
+st.person.occupation = 'Дизайнер';
+st.partners.push({ key: 'k1', ref: { new: { first_name: 'Олег', last_name: 'Смирнов', patronymic: '', gender: 'm', birth_date: '' } }, status: 'married' });
+st.children.push({ ref: { new: { first_name: 'Ева', last_name: 'Смирнова', patronymic: '', gender: 'f', birth_date: '' } }, otherParent: { key: 'k1' } });
+const bp = buildPayload(m, 'd-ira', st);
+eq('форма: изменённые поля', bp.payload.person, { occupation: 'Дизайнер' });
+eq('форма: добавления', bp.payload.relations.add.map(r => r.type), ['partner', 'child']);
+eq('форма: ничего не удалено', bp.payload.relations.remove, []);
+const st2 = baseState(m, 'd-dima');
+const bp2 = buildPayload(m, 'd-dima', st2);
+eq('форма: без изменений', bp2.changed, false);
+st2.children = st2.children.filter(c => c.ref.id !== 'd-sof');
+eq('форма: удаление ребёнка', buildPayload(m, 'd-dima', st2).payload.relations.remove, [{ type: 'child', id: 'd-sof' }]);
+const st3 = overlay(m, baseState(m, null), demo.submissions[0].payload);
+eq('форма: заявка → состояние', [st3.person.first_name, st3.parents[0]?.id, st3.parents[1]?.new?.first_name], ['Алиса', 'd-pav', 'Татьяна']);
+
+// ---------- раскладка: инварианты ----------
+function checkLayout(name, model, layout) {
+  const byRow = new Map();
+  for (const c of layout.cards) {
+    if (!byRow.has(c.y)) byRow.set(c.y, []);
+    byRow.get(c.y).push(c);
+  }
+  let overlaps = 0;
+  for (const row of byRow.values()) {
+    row.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < row.length; i++) if (row[i].x < row[i - 1].x + row[i - 1].w + 4) overlaps++;
+  }
+  const primary = layout.cards.filter(c => !c.ghost).map(c => c.personId);
+  const unique = new Set(primary);
+  const missing = [...model.people.keys()].filter(id => !unique.has(id));
+  const bad = layout.cards.some(c => !isFinite(c.x) || !isFinite(c.y)) || !isFinite(layout.width);
+  ok(`${name}: без наложений`, overlaps === 0, `наложений: ${overlaps}`);
+  ok(`${name}: каждый ровно один раз`, primary.length === unique.size && (layout.mode === 'hourglass' || missing.length === 0), `карточек ${primary.length}, уникальных ${unique.size}, пропущено ${missing.length}`);
+  ok(`${name}: координаты`, !bad);
+  // дети ниже родителей (по фактическим концам линий)
+  let wrong = 0;
+  for (const l of layout.lines) {
+    if (l.kind === 'family' && !(l.parentY < l.childY)) wrong++;
+  }
+  ok(`${name}: дети ниже родителей`, wrong === 0, `нарушений: ${wrong}`);
+}
+checkLayout('демо, вся семья', m, layoutFamily(m));
+const hg = layoutHourglass(m, 'd-dima'); hg.mode = 'hourglass';
+checkLayout('демо, предки и потомки', m, hg);
+eq('демо: в «предках и потомках» Дмитрия есть оба деда', ['d-nik', 'd-mih'].every(id => hg.index.has(id)), true);
+
+// случайные деревья
+function rng(seed) { return () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }; }
+function randomTree(seed, size) {
+  const r = rng(seed);
+  const people = [], pc = [], unions = [];
+  let n = 0;
+  const mk = (g, gen) => { const p = { id: 'p' + (n++), first_name: 'P' + n, last_name: '', gender: g, birth_date: String(1850 + gen * 25 + Math.floor(r() * 10)) }; people.push(p); return p; };
+  let gen = [mk('m', 0), mk('f', 0)];
+  unions.push({ id: 'u0', partner1_id: gen[0].id, partner2_id: gen[1].id, status: 'married' });
+  let couples = [[gen[0], gen[1]]];
+  for (let g = 1; g < 6 && people.length < size; g++) {
+    const next = [];
+    for (const [a, b] of couples) {
+      const kids = 1 + Math.floor(r() * 3);
+      for (let k = 0; k < kids && people.length < size; k++) {
+        const c = mk(r() < 0.5 ? 'm' : 'f', g);
+        pc.push({ parent_id: a.id, child_id: c.id }); if (b) pc.push({ parent_id: b.id, child_id: c.id });
+        if (r() < 0.75) {
+          const sp = mk(c.gender === 'm' ? 'f' : 'm', g);
+          unions.push({ id: 'u' + n, partner1_id: c.id, partner2_id: sp.id, status: r() < 0.15 ? 'divorced' : 'married' });
+          // иногда у супруга свои родители в дереве
+          if (r() < 0.3) { const pp1 = mk('m', g - 1), pp2 = mk('f', g - 1); unions.push({ id: 'u' + n, partner1_id: pp1.id, partner2_id: pp2.id }); pc.push({ parent_id: pp1.id, child_id: sp.id }, { parent_id: pp2.id, child_id: sp.id }); }
+          next.push([c, sp]);
+          if (r() < 0.15) { const sp2 = mk(c.gender === 'm' ? 'f' : 'm', g); unions.push({ id: 'u' + n, partner1_id: c.id, partner2_id: sp2.id }); next.push([c, sp2]); }
+        } else if (r() < 0.3) next.push([c, null]);
+      }
+    }
+    couples = next;
+  }
+  // брак между ветками (двоюродные/разные линии)
+  const singles = people.filter(p => !unions.some(u => u.partner1_id === p.id || u.partner2_id === p.id) && pc.some(x => x.child_id === p.id));
+  if (singles.length >= 2) unions.push({ id: 'ux', partner1_id: singles[0].id, partner2_id: singles[singles.length - 1].id });
+  return { people, parent_child: pc, unions, photos: [] };
+}
+let allOk = true;
+for (let s = 1; s <= 40; s++) {
+  const tm = buildModel(randomTree(s * 7919, 40 + (s % 5) * 40));
+  const before = results.length;
+  checkLayout(`случайное #${s} (${tm.people.size} чел.)`, tm, layoutFamily(tm));
+  const someone = [...tm.people.keys()][Math.floor(tm.people.size / 2)];
+  const hl = layoutHourglass(tm, someone); hl.mode = 'hourglass';
+  checkLayout(`случайное #${s} предки/потомки`, tm, hl);
+  if (results.slice(before).every(r => r.ok)) results.splice(before); else allOk = false;
+}
+ok('40 случайных деревьев: все проверки', allOk);
+
+// ---------- вывод ----------
+const fails = results.filter(r => !r.ok);
+window.__results = { total: results.length, failed: fails.length, fails };
+document.getElementById('out').innerHTML = results.map(r =>
+  `<span class="${r.ok ? 'ok' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name}</span>${r.ok ? '' : `  → получено: ${JSON.stringify(r.got)}  ожидалось: ${JSON.stringify(r.exp)}`}`).join('\n')
+  + `\n\nИтого: ${results.length - fails.length}/${results.length}`;
+</script>
+</body>
+</html>
