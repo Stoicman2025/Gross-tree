@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFFFF">
+<title>Семейное дерево</title>
+<!-- иконки и описание для установки на экран телефона -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Семья">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="loader" class="loader">
+  <div class="spinner"></div>
+  <div>Загрузка…</div>
+</div>
+
+<div id="lock" class="lock" hidden>
+  <form class="lock-card" id="lockForm" autocomplete="on">
+    <div class="lock-emblem" data-emblem></div>
+    <h1 id="lockTitle">Семейное дерево</h1>
+    <p>Введите семейный код, чтобы открыть дерево</p>
+    <input type="text" name="username" autocomplete="username" value="family" hidden>
+    <input class="input" id="lockInput" type="password" name="family-code" autocomplete="current-password" placeholder="Семейный код" required>
+    <button class="btn btn-primary btn-lg btn-block" type="submit" id="lockBtn">Открыть дерево</button>
+    <p class="lock-error" id="lockError" role="alert"></p>
+    <p class="lock-note">Браузер запомнит код, вводить его каждый раз не придётся.</p>
+    <p class="lock-demo" id="lockDemo" hidden>Демо-режим: данные хранятся только в этом браузере. Семейный код — <b>демо</b>.</p>
+  </form>
+</div>
+
+<div id="shell" class="shell" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" data-emblem></span>
+      <h1 id="treeTitle">Семейное дерево</h1>
+    </div>
+    <div class="search" id="searchBox">
+      <span data-icon="search"></span>
+      <input id="searchInput" type="search" placeholder="Найти человека…" autocomplete="off" aria-label="Поиск по дереву">
+    </div>
+    <nav class="actions">
+      <button class="btn btn-outline hide-sm" id="btnKin" title="Кем приходится"><span data-icon="link"></span><span class="lbl">Кем приходится</span></button>
+      <button class="btn btn-icon btn-ghost hide-sm" id="btnPrint" title="Печать и PDF" aria-label="Печать и PDF"><span data-icon="printer"></span></button>
+      <button class="btn btn-ghost hide-sm" id="btnAdmin" title="Администрирование"><span data-icon="shield"></span><span class="lbl">Админ</span><span class="badge" id="pendingBadge" hidden></span></button>
+      <button class="btn btn-primary" id="btnAdd" title="Добавить человека"><span data-icon="plus"></span><span class="lbl">Добавить человека</span></button>
+      <button class="btn btn-icon btn-ghost" id="btnMenu" aria-label="Меню"><span data-icon="menu"></span></button>
+    </nav>
+  </header>
+  <div class="demo-banner" id="demoBanner" hidden>
+    <span><b>Демо-режим.</b> Данные хранятся только в этом браузере. Пароль администратора — <b>demo</b>.</span>
+    <button id="demoReset" type="button">Сбросить демо-данные</button>
+  </div>
+  <main class="stage" id="stage">
+    <div class="tree-viewport" id="viewport"><div class="tree-world" id="world"></div></div>
+    <div class="gen-labels" id="genLabels" aria-hidden="true"></div>
+    <div class="viewbar">
+      <span class="focus-chip" id="focusChip" hidden></span>
+      <div class="seg" role="tablist">
+        <button data-view="family" class="active" role="tab">Вся семья</button>
+        <button data-view="focus" role="tab">Предки и потомки</button>
+      </div>
+    </div>
+    <div class="zoom-controls">
+      <button id="zoomIn" title="Приблизить" aria-label="Приблизить"><span data-icon="zoomIn"></span></button>
+      <button id="zoomOut" title="Отдалить" aria-label="Отдалить"><span data-icon="zoomOut"></span></button>
+      <button id="zoomFit" title="Показать всё дерево" aria-label="Показать всё"><span data-icon="fit"></span></button>
+      <button id="zoomMe" title="Найти меня" aria-label="Найти меня"><span data-icon="target"></span></button>
+    </div>
+    <div class="empty" id="empty" hidden></div>
+  </main>
+  <aside class="drawer" id="drawer" aria-hidden="true"></aside>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="printRoot" class="print-root"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
